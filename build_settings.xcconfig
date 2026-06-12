@@ -1,0 +1,20 @@
+// iPad Configuration
+TARGETED_DEVICE_FAMILY = 2
+IPHONEOS_DEPLOYMENT_TARGET = 16.0
+DEVELOPMENT_TEAM = ZZ6C4342NF
+PRODUCT_BUNDLE_IDENTIFIER = Digitaal-Hit-FM.Digitaal-Hit-FM-iPad
+SUPPORTS_MACCATALYST = NO
+SUPPORTS_UIKITFORMAC = NO
+
+// Info.plist Auto-Generation
+GENERATE_INFOPLIST_FILE = YES
+INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES
+INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES
+INFOPLIST_KEY_UILaunchScreen_Generation = YES
+INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+
+// Audio Background Mode
+INFOPLIST_KEY_UIBackgroundModes = audio
+
+// Encryption Declaration
+INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO
