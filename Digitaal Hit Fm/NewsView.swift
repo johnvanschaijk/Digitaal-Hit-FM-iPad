@@ -1,7 +1,7 @@
 import SwiftUI
 import Foundation
 import Combine
-import WebKit
+import SafariServices
 
 // MARK: - Model
 
@@ -15,6 +15,7 @@ struct NewsEntry: Identifiable {
 
 // MARK: - Loader
 
+@MainActor
 class NewsLoader: ObservableObject {
     @Published var entries: [NewsEntry] = []
     @Published var isLoading = false
@@ -23,21 +24,20 @@ class NewsLoader: ObservableObject {
     private let feedURL = URL(string: "https://www.mooiberghem.nl/index.php?format=feed&type=atom")!
 
     func load() {
+        guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
-        var request = URLRequest(url: feedURL)
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
-            DispatchQueue.main.async {
-                self?.isLoading = false
-                if let error = error {
-                    self?.errorMessage = error.localizedDescription
-                    return
-                }
-                guard let data = data else { return }
-                self?.entries = AtomFeedParser(data: data).parse()
+        Task {
+            do {
+                var request = URLRequest(url: feedURL)
+                request.cachePolicy = .reloadIgnoringLocalCacheData
+                let (data, _) = try await URLSession.shared.data(for: request)
+                entries = AtomFeedParser(data: data).parse()
+            } catch {
+                errorMessage = error.localizedDescription
             }
-        }.resume()
+            isLoading = false
+        }
     }
 }
 
@@ -137,7 +137,7 @@ private extension String {
 struct NewsView: View {
     @StateObject private var loader = NewsLoader()
     @Environment(\.dismiss) private var dismiss
-    @State private var showWebView = false
+    @State private var showSafari = false
     @State private var selectedURL: URL?
 
     var body: some View {
@@ -161,8 +161,9 @@ struct NewsView: View {
                 } else {
                     List(loader.entries) { entry in
                         Button {
-                            selectedURL = entry.link
-                            showWebView = true
+                            guard let url = entry.link else { return }
+                            selectedURL = url
+                            showSafari = true
                         } label: {
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(entry.title)
@@ -199,32 +200,24 @@ struct NewsView: View {
                 }
             }
             .onAppear { loader.load() }
-            .fullScreenCover(isPresented: $showWebView) {
-                ZStack {
-                    if let url = selectedURL {
-                        WebViewRepresentable(url: url) {}
+            .sheet(isPresented: $showSafari) {
+                if let url = selectedURL {
+                    NewsSafariView(url: url)
                         .ignoresSafeArea()
-                    }
-                    
-                    VStack {
-                        HStack {
-                            Button {
-                                showWebView = false
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "chevron.left")
-                                    Text("Terug")
-                                }
-                                .foregroundColor(.red)
-                            }
-                            Spacer()
-                        }
-                        .padding(16)
-                        Spacer()
-                    }
                 }
-                .ignoresSafeArea()
             }
         }
     }
+}
+
+private struct NewsSafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let vc = SFSafariViewController(url: url)
+        vc.preferredControlTintColor = .systemRed
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }

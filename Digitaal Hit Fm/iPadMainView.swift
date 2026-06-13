@@ -1,6 +1,7 @@
 import SwiftUI
 import AVKit
 import WebKit
+import SafariServices
 
 // MARK: - Web View Wrapper
 
@@ -8,38 +9,31 @@ struct WebViewRepresentable: UIViewRepresentable {
     let url: URL
     let onDismiss: () -> Void
     
-    func makeUIView(context: Context) -> UIView {
-        let container = UIView()
-        let webView = WKWebView(frame: .zero)
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+        
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
         webView.load(URLRequest(url: url))
-        
-        let closeButton = UIButton(type: .system)
-        closeButton.setTitle("✕", for: .normal)
-        closeButton.titleLabel?.font = .systemFont(ofSize: 20)
-        closeButton.addAction(UIAction { _ in onDismiss() }, for: .touchUpInside)
-        
-        container.addSubview(webView)
-        container.addSubview(closeButton)
-        
-        webView.translatesAutoresizingMaskIntoConstraints = false
-        closeButton.translatesAutoresizingMaskIntoConstraints = false
-        
-        NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: container.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            
-            closeButton.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
-            closeButton.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-            closeButton.widthAnchor.constraint(equalToConstant: 44),
-            closeButton.heightAnchor.constraint(equalToConstant: 44)
-        ])
-        
-        return container
+        return webView
     }
     
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+    
+    class Coordinator: NSObject, WKNavigationDelegate {
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            AppLogger.shared.log(event: "WebView.loaded", details: webView.url?.absoluteString ?? "unknown")
+        }
+        
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            AppLogger.shared.log(event: "WebView.error", details: error.localizedDescription)
+        }
+    }
 }
 
 struct iPadMainView: View {
@@ -264,7 +258,7 @@ struct iPadMainView: View {
 
 private struct NewsPanel: View {
     @StateObject private var loader = NewsLoader()
-    @State private var showWebView = false
+    @State private var showSafari = false
     @State private var selectedURL: URL?
 
     var body: some View {
@@ -278,11 +272,16 @@ private struct NewsPanel: View {
                     Button("Opnieuw") { loader.load() }
                 }
                 .padding(.top, 40)
+            } else if loader.entries.isEmpty {
+                Text("Geen nieuws gevonden")
+                    .foregroundColor(.gray)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(loader.entries) { entry in
                     Button {
-                        selectedURL = entry.link
-                        showWebView = true
+                        guard let url = entry.link else { return }
+                        selectedURL = url
+                        showSafari = true
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(entry.title).font(.headline).foregroundColor(.primary)
@@ -298,33 +297,25 @@ private struct NewsPanel: View {
             }
         }
         .onAppear { loader.load() }
-        .fullScreenCover(isPresented: $showWebView) {
-            ZStack {
-                if let url = selectedURL {
-                    WebViewRepresentable(url: url) {}
+        .sheet(isPresented: $showSafari) {
+            if let url = selectedURL {
+                SafariView(url: url)
                     .ignoresSafeArea()
-                }
-                
-                VStack {
-                    HStack {
-                        Button {
-                            showWebView = false
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "chevron.left")
-                                Text("Terug")
-                            }
-                            .foregroundColor(.red)
-                        }
-                        Spacer()
-                    }
-                    .padding(16)
-                    Spacer()
-                }
             }
-            .ignoresSafeArea()
         }
     }
+}
+
+private struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let vc = SFSafariViewController(url: url)
+        vc.preferredControlTintColor = .systemRed
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
 
 // MARK: - Info Sheet
